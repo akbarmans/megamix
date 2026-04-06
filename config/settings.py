@@ -104,4 +104,5 @@ CSRF_TRUSTED_ORIGINS = [
     'https://*.up.railway.app',
 ]
 
-X_FRAME_OPTIONS = 'ALLOWALL'
+# Default clickjacking protection; webapp views use @xframe_options_exempt
+X_FRAME_OPTIONS = 'SAMEORIGIN'

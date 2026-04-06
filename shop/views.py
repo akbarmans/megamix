@@ -1,16 +1,21 @@
 import json
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.shortcuts import render, get_object_or_404, redirect
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.clickjacking import xframe_options_exempt
 from django.views.decorators.http import require_http_methods
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models import Sum, Count, Q
 from django.utils import timezone
 from datetime import timedelta
+import logging
 
 from .models import Product, Category, Cart, CartItem, Order, OrderItem
+from .telegram_auth import get_user_id_from_request
+
+logger = logging.getLogger(__name__)
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
@@ -19,8 +24,21 @@ def is_admin(user):
     return user.is_staff or user.is_superuser
 
 
+def _json_error(msg, status=400):
+    return JsonResponse({'success': False, 'error': msg}, status=status)
+
+
+def _parse_json_body(request):
+    """Safely parse request body as JSON."""
+    try:
+        return json.loads(request.body), None
+    except (json.JSONDecodeError, UnicodeDecodeError) as e:
+        return None, str(e)
+
+
 # ─── Telegram Mini WebApp ────────────────────────────────────────────────────
 
+@xframe_options_exempt
 def webapp_index(request):
     """Main page of the Telegram mini web app — product catalogue."""
     categories = Category.objects.prefetch_related('products').all()
@@ -41,6 +59,7 @@ def webapp_index(request):
     })
 
 
+@xframe_options_exempt
 def webapp_cart(request):
     """Cart page of the Telegram mini web app."""
     return render(request, 'webapp/cart.html')
@@ -49,9 +68,14 @@ def webapp_cart(request):
 # ─── Cart API (for WebApp & Bot) ─────────────────────────────────────────────
 
 @csrf_exempt
+@xframe_options_exempt
 @require_http_methods(['GET'])
 def api_cart_get(request, user_id):
-    cart, _ = Cart.objects.get_or_create(telegram_user_id=user_id)
+    verified_id = get_user_id_from_request(request, user_id)
+    if verified_id is None:
+        return _json_error('Unauthorized', status=403)
+
+    cart, _ = Cart.objects.get_or_create(telegram_user_id=verified_id)
     items = []
     for item in cart.items.select_related('product'):
         items.append({
@@ -72,13 +96,29 @@ def api_cart_get(request, user_id):
 
 
 @csrf_exempt
+@xframe_options_exempt
 @require_http_methods(['POST'])
 def api_cart_add(request, user_id):
-    data = json.loads(request.body)
+    verified_id = get_user_id_from_request(request, user_id)
+    if verified_id is None:
+        return _json_error('Unauthorized', status=403)
+
+    data, err = _parse_json_body(request)
+    if data is None:
+        return _json_error(f'Invalid JSON: {err}')
+
     product_id = data.get('product_id')
-    quantity = int(data.get('quantity', 1))
+    if not product_id:
+        return _json_error('product_id is required')
+
+    try:
+        product_id = int(product_id)
+        quantity = max(1, int(data.get('quantity', 1)))
+    except (TypeError, ValueError):
+        return _json_error('Invalid product_id or quantity')
+
     product = get_object_or_404(Product, id=product_id, is_active=True)
-    cart, _ = Cart.objects.get_or_create(telegram_user_id=user_id)
+    cart, _ = Cart.objects.get_or_create(telegram_user_id=verified_id)
     item, created = CartItem.objects.get_or_create(cart=cart, product=product)
     if not created:
         item.quantity += quantity
@@ -89,12 +129,28 @@ def api_cart_add(request, user_id):
 
 
 @csrf_exempt
+@xframe_options_exempt
 @require_http_methods(['POST'])
 def api_cart_update(request, user_id):
-    data = json.loads(request.body)
+    verified_id = get_user_id_from_request(request, user_id)
+    if verified_id is None:
+        return _json_error('Unauthorized', status=403)
+
+    data, err = _parse_json_body(request)
+    if data is None:
+        return _json_error(f'Invalid JSON: {err}')
+
     item_id = data.get('item_id')
-    quantity = int(data.get('quantity', 1))
-    cart = get_object_or_404(Cart, telegram_user_id=user_id)
+    if not item_id:
+        return _json_error('item_id is required')
+
+    try:
+        item_id = int(item_id)
+        quantity = int(data.get('quantity', 1))
+    except (TypeError, ValueError):
+        return _json_error('Invalid item_id or quantity')
+
+    cart = get_object_or_404(Cart, telegram_user_id=verified_id)
     item = get_object_or_404(CartItem, id=item_id, cart=cart)
     if quantity <= 0:
         item.delete()
@@ -105,17 +161,27 @@ def api_cart_update(request, user_id):
 
 
 @csrf_exempt
+@xframe_options_exempt
 @require_http_methods(['DELETE'])
 def api_cart_remove(request, user_id, item_id):
-    cart = get_object_or_404(Cart, telegram_user_id=user_id)
+    verified_id = get_user_id_from_request(request, user_id)
+    if verified_id is None:
+        return _json_error('Unauthorized', status=403)
+
+    cart = get_object_or_404(Cart, telegram_user_id=verified_id)
     CartItem.objects.filter(id=item_id, cart=cart).delete()
     return JsonResponse({'success': True, 'total': str(cart.total)})
 
 
 @csrf_exempt
+@xframe_options_exempt
 @require_http_methods(['POST'])
 def api_cart_clear(request, user_id):
-    cart = get_object_or_404(Cart, telegram_user_id=user_id)
+    verified_id = get_user_id_from_request(request, user_id)
+    if verified_id is None:
+        return _json_error('Unauthorized', status=403)
+
+    cart = get_object_or_404(Cart, telegram_user_id=verified_id)
     cart.items.all().delete()
     return JsonResponse({'success': True})
 
@@ -123,22 +189,30 @@ def api_cart_clear(request, user_id):
 # ─── Order API ───────────────────────────────────────────────────────────────
 
 @csrf_exempt
+@xframe_options_exempt
 @require_http_methods(['POST'])
 def api_order_create(request, user_id):
-    data = json.loads(request.body)
-    cart = get_object_or_404(Cart, telegram_user_id=user_id)
+    verified_id = get_user_id_from_request(request, user_id)
+    if verified_id is None:
+        return _json_error('Unauthorized', status=403)
+
+    data, err = _parse_json_body(request)
+    if data is None:
+        return _json_error(f'Invalid JSON: {err}')
+
+    cart = get_object_or_404(Cart, telegram_user_id=verified_id)
     items = list(cart.items.select_related('product'))
     if not items:
-        return JsonResponse({'success': False, 'error': 'Корзина пуста'}, status=400)
+        return _json_error('Корзина пуста', status=400)
 
     total = cart.total
     order = Order.objects.create(
-        telegram_user_id=user_id,
-        telegram_username=data.get('username', ''),
-        full_name=data.get('full_name', ''),
-        phone=data.get('phone', ''),
-        address=data.get('address', ''),
-        comment=data.get('comment', ''),
+        telegram_user_id=verified_id,
+        telegram_username=str(data.get('username', ''))[:200],
+        full_name=str(data.get('full_name', ''))[:300],
+        phone=str(data.get('phone', ''))[:50],
+        address=str(data.get('address', '')),
+        comment=str(data.get('comment', '')),
         total_price=total,
     )
     for item in items:
@@ -209,7 +283,6 @@ def dashboard_logout(request):
 def dashboard_index(request):
     now = timezone.now()
     last_30 = now - timedelta(days=30)
-    last_7 = now - timedelta(days=7)
 
     total_orders = Order.objects.count()
     new_orders = Order.objects.filter(status='new').count()
@@ -219,10 +292,8 @@ def dashboard_index(request):
     ).aggregate(total=Sum('total_price'))['total'] or 0
 
     total_products = Product.objects.filter(is_active=True).count()
-
     recent_orders = Order.objects.order_by('-created_at')[:10]
 
-    # Daily orders for last 7 days
     daily_data = []
     for i in range(6, -1, -1):
         day = now - timedelta(days=i)
@@ -277,8 +348,8 @@ def dashboard_product_edit(request, pk=None):
         name = request.POST.get('name', '').strip()
         sku = request.POST.get('sku', '').strip()
         description = request.POST.get('description', '').strip()
-        price = request.POST.get('price', '0').replace(',', '.').strip()
-        old_price = request.POST.get('old_price', '').replace(',', '.').strip()
+        price_raw = request.POST.get('price', '0').replace(',', '.').strip()
+        old_price_raw = request.POST.get('old_price', '').replace(',', '.').strip()
         image_url = request.POST.get('image_url', '').strip()
         category_id = request.POST.get('category', '')
         in_stock = request.POST.get('in_stock') == 'on'
@@ -291,15 +362,21 @@ def dashboard_product_edit(request, pk=None):
         product.sku = sku
         product.description = description
         try:
-            product.price = Decimal(price)
-        except Exception:
+            product.price = Decimal(price_raw)
+        except (InvalidOperation, ValueError):
             product.price = Decimal('0')
-        product.old_price = Decimal(old_price) if old_price else None
+        try:
+            product.old_price = Decimal(old_price_raw) if old_price_raw else None
+        except (InvalidOperation, ValueError):
+            product.old_price = None
         product.image_url = image_url
         product.in_stock = in_stock
         product.is_active = is_active
         if category_id:
-            product.category_id = int(category_id)
+            try:
+                product.category_id = int(category_id)
+            except ValueError:
+                product.category = None
         else:
             product.category = None
 
@@ -378,7 +455,6 @@ def dashboard_analytics(request):
     for s, label in Order.STATUS_CHOICES:
         status_stats[label] = orders.filter(status=s).count()
 
-    # Top products
     top_products = (
         OrderItem.objects.filter(order__created_at__gte=since)
         .values('product_name')
@@ -386,7 +462,6 @@ def dashboard_analytics(request):
         .order_by('-total_qty')[:10]
     )
 
-    # Daily revenue
     daily_revenue = []
     for i in range(29, -1, -1):
         day = now - timedelta(days=i)
