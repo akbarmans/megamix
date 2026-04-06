@@ -1,0 +1,111 @@
+{% extends "dashboard/base.html" %}
+{% block title %}Аналитика — Megamix{% endblock %}
+{% block page_title %}Аналитика{% endblock %}
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<!-- Period filter -->
+<div class="mb-4">
+  <div class="d-flex gap-2">
+    <a href="?period=7d" class="btn {% if period == '7d' %}btn-primary{% else %}btn-outline{% endif %}">7 дней</a>
+    <a href="?period=30d" class="btn {% if period == '30d' %}btn-primary{% else %}btn-outline{% endif %}">30 дней</a>
+    <a href="?period=90d" class="btn {% if period == '90d' %}btn-primary{% else %}btn-outline{% endif %}">90 дней</a>
+  </div>
+</div>
+
+<!-- KPI -->
+<div class="stats-grid mb-4">
+  <div class="stat-card">
+    <div class="stat-icon">🛒</div>
+    <div class="stat-label">Заказов</div>
+    <div class="stat-value">{{ total_orders }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">💰</div>
+    <div class="stat-label">Выручка</div>
+    <div class="stat-value" style="font-size:20px">{{ total_revenue|floatformat:0 }} сум</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon">📊</div>
+    <div class="stat-label">Средний чек</div>
+    <div class="stat-value" style="font-size:20px">{{ avg_order|floatformat:0 }} сум</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px">
+  <!-- Revenue chart -->
+  <div class="card">
+    <div class="card-header">📈 Выручка по дням</div>
+    <div class="card-body">
+      <div class="chart-container">
+        <canvas id="revenueChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status breakdown -->
+  <div class="card">
+    <div class="card-header">📋 Статусы заказов</div>
+    <div class="card-body">
+      {% for label, count in status_stats.items %}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+        <span>{{ label }}</span>
+        <strong>{{ count }}</strong>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Top products -->
+<div class="card">
+  <div class="card-header">🏆 Топ товаров по количеству продаж</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Товар</th><th>Продано шт.</th><th>Выручка</th></tr>
+      </thead>
+      <tbody>
+      {% for p in top_products %}
+      <tr>
+        <td>{{ p.product_name }}</td>
+        <td>{{ p.total_qty }}</td>
+        <td class="fw-bold">{{ p.total_rev|floatformat:0 }} сум</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="3" class="text-muted" style="text-align:center;padding:20px">Нет данных</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const data = {{ daily_revenue|safe }};
+const ctx = document.getElementById('revenueChart').getContext('2d');
+new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: data.map(d => d.day),
+    datasets: [{
+      label: 'Выручка (сум)',
+      data: data.map(d => d.revenue),
+      borderColor: '#2563eb',
+      backgroundColor: 'rgba(37,99,235,0.1)',
+      fill: true,
+      tension: 0.3,
+    }]
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { y: { beginAtZero: true } }
+  }
+});
+</script>
+{% endblock %}

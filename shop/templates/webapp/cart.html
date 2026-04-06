@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Megamix — Корзина</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --primary: var(--tg-theme-button-color, #2481cc);
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--tg-theme-bg-color, #f5f5f5);
+    color: var(--tg-theme-text-color, #222);
+    padding-bottom: 100px;
+  }
+
+  .header {
+    background: var(--tg-theme-bg-color, #fff);
+    padding: 14px 16px;
+    font-size: 18px; font-weight: 700;
+    border-bottom: 1px solid rgba(0,0,0,.08);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .cart-list { padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+
+  .cart-item {
+    background: var(--tg-theme-bg-color, #fff);
+    border-radius: var(--radius);
+    padding: 14px;
+    display: flex; gap: 12px; align-items: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    border: 1px solid rgba(0,0,0,.06);
+  }
+
+  .item-img {
+    width: 60px; height: 60px; border-radius: 8px;
+    object-fit: cover; background: #f5f5f5; flex-shrink: 0;
+  }
+  .item-no-img {
+    width: 60px; height: 60px; border-radius: 8px;
+    background: #f0f0f0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; flex-shrink: 0;
+  }
+
+  .item-info { flex: 1; min-width: 0; }
+  .item-name { font-size: 14px; font-weight: 500; margin-bottom: 2px; }
+  .item-price { font-size: 13px; color: var(--tg-theme-hint-color, #999); }
+  .item-subtotal { font-size: 15px; font-weight: 700; color: var(--primary); }
+
+  .qty-control { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .qty-btn {
+    width: 32px; height: 32px;
+    border: 1.5px solid var(--primary);
+    background: none; color: var(--primary);
+    border-radius: 8px; cursor: pointer;
+    font-size: 18px; font-weight: 700;
+  }
+  .qty-num { min-width: 24px; text-align: center; font-weight: 700; }
+
+  .delete-btn {
+    background: none; border: none; cursor: pointer;
+    font-size: 20px; padding: 4px; color: #ef4444;
+    flex-shrink: 0;
+  }
+
+  /* Order form */
+  .order-form {
+    background: var(--tg-theme-bg-color, #fff);
+    margin: 0 16px; border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    border: 1px solid rgba(0,0,0,.06);
+  }
+  .order-form h3 { font-size: 15px; font-weight: 700; margin-bottom: 14px; }
+  .form-group { margin-bottom: 12px; }
+  .form-label { font-size: 12px; color: var(--tg-theme-hint-color); margin-bottom: 4px; display: block; }
+  .form-input {
+    width: 100%; padding: 10px 13px;
+    border: 1.5px solid rgba(0,0,0,.12); border-radius: 9px;
+    font-size: 14px; outline: none;
+    background: var(--tg-theme-bg-color);
+    color: var(--tg-theme-text-color);
+  }
+  .form-input:focus { border-color: var(--primary); }
+
+  /* Summary */
+  .summary {
+    margin: 12px 16px;
+    background: var(--tg-theme-bg-color, #fff);
+    border-radius: var(--radius);
+    padding: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
+    border: 1px solid rgba(0,0,0,.06);
+  }
+  .summary-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 0;
+  }
+  .summary-total {
+    font-size: 18px; font-weight: 700; color: var(--primary);
+  }
+
+  /* Bottom checkout button */
+  .checkout-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 12px 16px;
+    background: var(--tg-theme-bg-color, #fff);
+    border-top: 1px solid rgba(0,0,0,.08);
+  }
+  .checkout-btn {
+    width: 100%; padding: 14px;
+    background: var(--primary); color: #fff;
+    border: none; border-radius: var(--radius);
+    font-size: 16px; font-weight: 700; cursor: pointer;
+    transition: opacity .15s;
+  }
+  .checkout-btn:active { opacity: .85; }
+  .checkout-btn:disabled { background: #ccc; cursor: not-allowed; }
+
+  /* Empty cart */
+  .empty { text-align: center; padding: 60px 20px; color: var(--tg-theme-hint-color, #999); }
+  .empty .icon { font-size: 60px; margin-bottom: 16px; }
+  .empty p { font-size: 16px; margin-bottom: 20px; }
+  .back-btn {
+    display: inline-block; padding: 12px 28px;
+    background: var(--primary); color: #fff;
+    border-radius: var(--radius); text-decoration: none;
+    font-weight: 600; font-size: 14px; border: none; cursor: pointer;
+  }
+
+  .divider { height: 1px; background: rgba(0,0,0,.06); margin: 8px 16px; }
+
+  .loader { text-align: center; padding: 40px; }
+</style>
+</head>
+<body>
+<div class="header">
+  <span>🛒 Корзина</span>
+  <span id="itemCount" style="font-size:14px;color:var(--tg-theme-hint-color,#999)"></span>
+</div>
+
+<div id="app">
+  <div class="loader">Загрузка...</div>
+</div>
+
+<div class="checkout-bar" id="checkoutBar" style="display:none">
+  <button class="checkout-btn" id="checkoutBtn" onclick="submitOrder()">
+    Оформить заказ
+  </button>
+</div>
+
+<script>
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+const userId = tg.initDataUnsafe?.user?.id || 0;
+const tgUser = tg.initDataUnsafe?.user || {};
+let cartData = null;
+
+async function loadCart() {
+  if (!userId) {
+    renderEmpty('Откройте приложение через Telegram');
+    return;
+  }
+  const r = await fetch(`/api/cart/${userId}/`);
+  cartData = await r.json();
+  render();
+}
+
+function render() {
+  const app = document.getElementById('app');
+  if (!cartData || cartData.items.length === 0) {
+    renderEmpty('Ваша корзина пуста');
+    document.getElementById('checkoutBar').style.display = 'none';
+    return;
+  }
+
+  document.getElementById('itemCount').textContent = `${cartData.item_count} товар(ов)`;
+  document.getElementById('checkoutBar').style.display = 'block';
+
+  let html = '<div class="cart-list">';
+  cartData.items.forEach(item => {
+    html += `
+    <div class="cart-item" id="item-${item.id}">
+      ${item.photo_url
+        ? `<img src="${item.photo_url}" class="item-img" onerror="this.className='item-no-img'; this.textContent='📦'">`
+        : `<div class="item-no-img">📦</div>`
+      }
+      <div class="item-info">
+        <div class="item-name">${escHtml(item.name)}</div>
+        ${item.sku ? `<div class="item-price">${escHtml(item.sku)}</div>` : ''}
+        <div class="item-price">${formatPrice(item.price)} сум × ${item.quantity}</div>
+        <div class="item-subtotal">${formatPrice(item.subtotal)} сум</div>
+        <div class="qty-control">
+          <button class="qty-btn" onclick="changeQty(${item.id}, ${item.product_id}, -1)">−</button>
+          <span class="qty-num" id="qty-${item.id}">${item.quantity}</span>
+          <button class="qty-btn" onclick="changeQty(${item.id}, ${item.product_id}, 1)">+</button>
+        </div>
+      </div>
+      <button class="delete-btn" onclick="removeItem(${item.id})">🗑</button>
+    </div>`;
+  });
+  html += '</div>';
+
+  // Summary
+  html += `
+  <div class="summary">
+    <div class="summary-row">
+      <span>Товаров: ${cartData.item_count}</span>
+    </div>
+    <div class="summary-row">
+      <span style="font-weight:600">Итого:</span>
+      <span class="summary-total" id="totalDisplay">${formatPrice(cartData.total)} сум</span>
+    </div>
+  </div>`;
+
+  // Order form
+  html += `
+  <div class="order-form" id="orderForm">
+    <h3>📋 Данные для заказа</h3>
+    <div class="form-group">
+      <label class="form-label">ФИО</label>
+      <input type="text" class="form-input" id="fullName" placeholder="Иванов Иван Иванович"
+             value="${escHtml(tgUser.first_name || '')} ${escHtml(tgUser.last_name || '')}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Телефон *</label>
+      <input type="tel" class="form-input" id="phone" placeholder="+998 90 123 45 67" required>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Адрес доставки</label>
+      <input type="text" class="form-input" id="address" placeholder="Улица, дом, квартира">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Комментарий</label>
+      <input type="text" class="form-input" id="comment" placeholder="Любые пожелания...">
+    </div>
+  </div>`;
+
+  app.innerHTML = html;
+}
+
+function renderEmpty(msg) {
+  document.getElementById('app').innerHTML = `
+    <div class="empty">
+      <div class="icon">🛒</div>
+      <p>${msg}</p>
+      <button class="back-btn" onclick="goToCatalogue()">← Перейти в каталог</button>
+    </div>`;
+  document.getElementById('itemCount').textContent = '';
+  document.getElementById('checkoutBar').style.display = 'none';
+}
+
+function goToCatalogue() {
+  window.location.href = '/webapp/';
+}
+
+async function changeQty(itemId, productId, delta) {
+  const qtyEl = document.getElementById(`qty-${itemId}`);
+  const currentQty = parseInt(qtyEl?.textContent || '1');
+  const newQty = currentQty + delta;
+
+  if (newQty <= 0) {
+    await removeItem(itemId);
+    return;
+  }
+
+  await fetch(`/api/cart/${userId}/update/`, {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ item_id: itemId, quantity: newQty })
+  });
+  tg.HapticFeedback?.impactOccurred('light');
+  await loadCart();
+}
+
+async function removeItem(itemId) {
+  await fetch(`/api/cart/${userId}/remove/${itemId}/`, { method: 'DELETE' });
+  tg.HapticFeedback?.impactOccurred('medium');
+  await loadCart();
+}
+
+async function submitOrder() {
+  const phone = document.getElementById('phone')?.value.trim();
+  if (!phone) {
+    tg.showAlert('Пожалуйста, укажите номер телефона');
+    return;
+  }
+
+  const btn = document.getElementById('checkoutBtn');
+  btn.disabled = true;
+  btn.textContent = 'Оформляем...';
+
+  const orderData = {
+    username: tgUser.username || '',
+    full_name: document.getElementById('fullName')?.value.trim() || '',
+    phone,
+    address: document.getElementById('address')?.value.trim() || '',
+    comment: document.getElementById('comment')?.value.trim() || '',
+  };
+
+  try {
+    const r = await fetch(`/api/order/${userId}/create/`, {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(orderData)
+    });
+    const data = await r.json();
+    if (data.success) {
+      tg.HapticFeedback?.notificationOccurred('success');
+      tg.showAlert(`✅ Заказ #${data.order_id} успешно оформлен!\nМы свяжемся с вами в ближайшее время.`, () => {
+        tg.close();
+      });
+    } else {
+      tg.showAlert('Ошибка: ' + (data.error || 'Попробуйте позже'));
+      btn.disabled = false;
+      btn.textContent = 'Оформить заказ';
+    }
+  } catch(e) {
+    tg.showAlert('Ошибка сети. Попробуйте позже.');
+    btn.disabled = false;
+    btn.textContent = 'Оформить заказ';
+  }
+}
+
+function formatPrice(v) {
+  return parseFloat(v).toLocaleString('ru-RU', {maximumFractionDigits:0});
+}
+
+function escHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+loadCart();
+</script>
+</body>
+</html>

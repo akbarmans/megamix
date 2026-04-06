@@ -1,0 +1,78 @@
+{% extends "dashboard/base.html" %}
+{% block title %}{% if product %}Редактировать товар{% else %}Добавить товар{% endif %} — Megamix{% endblock %}
+{% block page_title %}{% if product %}Редактировать товар{% else %}Добавить товар{% endif %}{% endblock %}
+
+{% block content %}
+<div style="max-width:700px">
+  <div class="card">
+    <div class="card-header">
+      {% if product %}✏️ Редактирование: {{ product.name|truncatechars:50 }}{% else %}➕ Новый товар{% endif %}
+    </div>
+    <div class="card-body">
+      <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="form-group">
+          <label class="form-label">Название товара *</label>
+          <input type="text" name="name" class="form-control" value="{{ product.name|default:'' }}" required placeholder="Введите название">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="form-group">
+            <label class="form-label">Артикул (SKU)</label>
+            <input type="text" name="sku" class="form-control" value="{{ product.sku|default:'' }}" placeholder="Например: MM-001">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Категория</label>
+            <select name="category" class="form-control">
+              <option value="">— Без категории —</option>
+              {% for cat in categories %}
+              <option value="{{ cat.id }}" {% if product.category_id == cat.id %}selected{% endif %}>{{ cat.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div class="form-group">
+            <label class="form-label">Цена (сум) *</label>
+            <input type="number" name="price" class="form-control" value="{{ product.price|default:'' }}" required min="0" step="0.01" placeholder="0">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Старая цена (сум)</label>
+            <input type="number" name="old_price" class="form-control" value="{{ product.old_price|default:'' }}" min="0" step="0.01" placeholder="Опционально">
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Описание</label>
+          <textarea name="description" class="form-control">{{ product.description|default:'' }}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Ссылка на фото (URL)</label>
+          <input type="url" name="image_url" class="form-control" value="{{ product.image_url|default:'' }}" placeholder="https://...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Загрузить фото</label>
+          <input type="file" name="image" class="form-control" accept="image/*">
+          {% if product.image %}
+          <div style="margin-top:8px">
+            <img src="{{ product.image.url }}" alt="" style="max-height:80px;border-radius:6px;border:1px solid var(--border)">
+          </div>
+          {% endif %}
+        </div>
+        <div style="display:flex;gap:24px;margin-bottom:18px">
+          <label class="form-check">
+            <input type="checkbox" name="in_stock" {% if product.in_stock or not product %}checked{% endif %}>
+            В наличии
+          </label>
+          <label class="form-check">
+            <input type="checkbox" name="is_active" {% if product.is_active or not product %}checked{% endif %}>
+            Активен (виден пользователям)
+          </label>
+        </div>
+        <div class="d-flex gap-2">
+          <button type="submit" class="btn btn-primary">💾 Сохранить</button>
+          <a href="{% url 'dashboard_products' %}" class="btn btn-outline">Отмена</a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}
