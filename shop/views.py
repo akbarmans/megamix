@@ -32,8 +32,8 @@ def _parse_json_body(request):
     """Safely parse request body as JSON."""
     try:
         return json.loads(request.body), None
-    except (json.JSONDecodeError, UnicodeDecodeError) as e:
-        return None, str(e)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None, 'Неверный формат JSON'
 
 
 # ─── Telegram Mini WebApp ────────────────────────────────────────────────────
