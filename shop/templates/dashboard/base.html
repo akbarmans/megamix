@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Megamix — Панель администратора{% endblock %}</title>
+{% load static %}
+<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+{% block extra_head %}{% endblock %}
+</head>
+<body>
+<div class="overlay" id="overlay" onclick="closeSidebar()"></div>
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      🎵 Megamix
+    </div>
+    <nav class="sidebar-nav">
+      <a href="{% url 'dashboard_index' %}" class="{% if active_page == 'index' %}active{% endif %}">
+        <span class="nav-icon">��</span> Обзор
+      </a>
+      <a href="{% url 'dashboard_orders' %}" class="{% if active_page == 'orders' %}active{% endif %}">
+        <span class="nav-icon">🛒</span> Заказы
+      </a>
+      <a href="{% url 'dashboard_products' %}" class="{% if active_page == 'products' %}active{% endif %}">
+        <span class="nav-icon">📦</span> Товары
+      </a>
+      <a href="{% url 'dashboard_analytics' %}" class="{% if active_page == 'analytics' %}active{% endif %}">
+        <span class="nav-icon">📈</span> Аналитика
+      </a>
+    </nav>
+    <div class="sidebar-footer">
+      <a href="{% url 'dashboard_logout' %}">
+        <span>🚪</span> Выйти
+      </a>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <header class="topbar">
+      <div class="d-flex align-items-center gap-3">
+        <button class="hamburger" onclick="toggleSidebar()">☰</button>
+        <h1>{% block page_title %}Панель администратора{% endblock %}</h1>
+      </div>
+      <span class="text-muted fs-sm">{{ user.username }}</span>
+    </header>
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('overlay').classList.toggle('show');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('overlay').classList.remove('show');
+}
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+</html>
